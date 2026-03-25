@@ -1,0 +1,42 @@
+name: Build linux-riscv64
+
+on:
+  push:
+    branches:
+      - linux-riscv64
+  pull_request:
+    branches:
+      - linux-riscv64
+  workflow_dispatch:
+
+env:
+  SDK_VERSION: "9.0.x"
+
+jobs:
+  build-riscv64:
+    name: Build (linux-riscv64, framework-dependent)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602 # v5.0.1
+        with:
+          dotnet-version: ${{ env.SDK_VERSION }}
+
+      - name: Restore
+        run: dotnet restore Jellyfin.Server/Jellyfin.Server.csproj
+
+      - name: Build
+        run: |
+          dotnet publish Jellyfin.Server/Jellyfin.Server.csproj \
+            --configuration Release \
+            --no-self-contained \
+            --output publish/jellyfin-riscv64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: jellyfin-server-linux-riscv64
+          retention-days: 30
+          path: publish/jellyfin-riscv64/
