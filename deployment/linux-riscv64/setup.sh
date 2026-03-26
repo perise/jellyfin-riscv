@@ -18,7 +18,9 @@ JELLYFIN_DIR="${JELLYFIN_DIR:-$HOME/jellyfin-server}"
 DOTNET_DIR="${DOTNET_DIR:-$HOME/dotnet9}"
 DATA_DIR="${DATA_DIR:-$HOME/jellyfin-data}"
 
+JELLYFIN_VERSION="10.11.6"
 DOTNET_RISCV_URL="https://github.com/dkurt/dotnet_riscv/releases/download/v9.0.100/dotnet-sdk-9.0.100-linux-riscv64-gcc-ubuntu-24.04.tar.gz"
+JELLYFIN_WEB_DEB="https://lon1.mirror.jellyfin.org/files/server/debian/stable/v${JELLYFIN_VERSION}/amd64/jellyfin-web_${JELLYFIN_VERSION}+deb12_all.deb"
 
 log() { echo "[setup] $*"; }
 
@@ -54,7 +56,25 @@ if [ ! -f "$NATIVE_DIR/libe_sqlite3.so" ]; then
     log "Symlinked $SQLITE_PATH -> $NATIVE_DIR/libe_sqlite3.so"
 fi
 
-# ---------- 4. systemd service (optional) ----------
+# ---------- 4. Web client ----------
+# The server binary does not bundle the web UI. Without it, http://<ip>:8096 only
+# serves the Swagger API docs. Download the pre-built arch-independent Debian package
+# and extract the static files into the expected location.
+WEB_DIR="$JELLYFIN_DIR/jellyfin-web"
+if [ -f "$WEB_DIR/index.html" ]; then
+    log "Web client already present at $WEB_DIR"
+else
+    log "Downloading jellyfin-web v${JELLYFIN_VERSION} (~30 MB)..."
+    TMP_DEB=$(mktemp --suffix=.deb)
+    TMP_WEB=$(mktemp -d)
+    wget -q --show-progress -O "$TMP_DEB" "$JELLYFIN_WEB_DEB"
+    dpkg-deb -x "$TMP_DEB" "$TMP_WEB"
+    mv "$TMP_WEB/usr/share/jellyfin/web" "$WEB_DIR"
+    rm -rf "$TMP_DEB" "$TMP_WEB"
+    log "Web client installed at $WEB_DIR"
+fi
+
+# ---------- 5. systemd service (optional) ----------
 SERVICE_FILE=/etc/systemd/system/jellyfin.service
 if [ ! -f "$SERVICE_FILE" ] && command -v systemctl &>/dev/null; then
     log "Creating systemd service..."
@@ -67,7 +87,7 @@ After=network.target
 Type=simple
 User=$USER
 Environment=DOTNET_ROOT=$DOTNET_DIR
-ExecStart=$DOTNET_DIR/dotnet $JELLYFIN_DIR/jellyfin.dll --datadir $DATA_DIR --nowebclient
+ExecStart=$DOTNET_DIR/dotnet $JELLYFIN_DIR/jellyfin.dll --datadir $DATA_DIR
 Restart=on-failure
 RestartSec=5
 
@@ -82,7 +102,9 @@ log ""
 log "Setup complete!"
 log ""
 log "To start Jellyfin:"
-log "  DOTNET_ROOT=$DOTNET_DIR $DOTNET_DIR/dotnet $JELLYFIN_DIR/jellyfin.dll --datadir $DATA_DIR --nowebclient"
+log "  DOTNET_ROOT=$DOTNET_DIR $DOTNET_DIR/dotnet $JELLYFIN_DIR/jellyfin.dll --datadir $DATA_DIR"
+log ""
+log "Then open: http://$(hostname -I | awk '{print $1}'):8096"
 log ""
 log "Or with systemd:"
 log "  sudo systemctl enable --now jellyfin"
